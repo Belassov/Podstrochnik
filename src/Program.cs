@@ -33,6 +33,18 @@ internal static class Program
         catch { /* логи не должны ронять приложение */ }
     }
 
+    /// <summary>Сохраняет лог прошлого запуска (log.prev.txt), не давая ему расти бесконечно.</summary>
+    private static void KeepPrevLog()
+    {
+        try
+        {
+            if (!File.Exists(LogPath)) return;
+            if (new FileInfo(LogPath).Length > 1024 * 1024) { File.Delete(LogPath); return; }
+            File.Copy(LogPath, Path.Combine(DataDir, "log.prev.txt"), true);
+        }
+        catch { /* логи не должны ронять приложение */ }
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr FindWindow(string? cls, string title);
     [DllImport("user32.dll")]
@@ -64,10 +76,11 @@ internal static class Program
         Application.SetCompatibleTextRenderingDefault(false);
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
 
-        File.WriteAllText(LogPath, "", new UTF8Encoding(false));
+        KeepPrevLog();                     // прошлый запуск не стираем — иначе «иногда не работает» не воспроизвести
         Log($"--- запуск, каталог данных {DataDir}");
 
-        try { Application.Run(new Host()); }
+        // --tray: запуск вместе с Windows — окно не показываем, только трей
+        try { Application.Run(new Host(args.Contains("--tray"))); }
         catch (Exception ex) { Log("КРИТИЧЕСКАЯ ОШИБКА: " + ex); throw; }
     }
 }
@@ -78,9 +91,28 @@ internal sealed class FrameForm : Form
 {
     private const int WS_THICKFRAME = 0x00040000, WM_NCCALCSIZE = 0x0083;
     private const int WM_NCHITTEST = 0x0084, WM_GETMINMAXINFO = 0x0024, WM_SIZE = 0x0005;
+    private const int WM_NCPAINT = 0x0085, WM_NCACTIVATE = 0x0086, WM_ACTIVATE = 0x0006;
+    private const int WM_NCUAHDRAWCAPTION = 0x00AE, WM_NCUAHDRAWFRAME = 0x00AF;   // служебные: тема рисует подпись и рамку
+    private const int WM_WINDOWPOSCHANGED = 0x0047, WM_ENTERSIZEMOVE = 0x0231, WM_EXITSIZEMOVE = 0x0232;
     private const int HTLEFT = 10, HTRIGHT = 11, HTTOP = 12, HTTOPLEFT = 13,
                       HTTOPRIGHT = 14, HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17;
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint dwFlags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left, Top, Right, Bottom;
+        public int Width => Right - Left;
+        public int Height => Bottom - Top;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct MONITORINFO { public int cbSize; public RECT Monitor, Work; public uint Flags; }
     /// <summary>Ширина полосы по краям, за которую окно тянется (в точках).</summary>
     public int Edge = 6;
     /// <summary>Ниже этого размера окно не сжимается.</summary>
@@ -89,6 +121,8 @@ internal sealed class FrameForm : Form
     public Action? OnSized;
     /// <summary>Диагностика: последняя зона, которую вернул хит-тест.</summary>
     public Action<string>? LogHit;
+    /// <summary>Вызывается, когда нужно заново убрать цвет системной рамки.</summary>
+    public Action? NoWindowBorder;
 
     protected override CreateParams CreateParams
     {
@@ -112,6 +146,36 @@ internal sealed class FrameForm : Form
         {
             case WM_NCCALCSIZE when m.WParam != IntPtr.Zero:
                 m.Result = IntPtr.Zero;     // клиентская область = всё окно, рамки не видно
+                return;
+
+            // Рамка нужна только как зона захвата для изменения размера, рисовать её нельзя:
+            // иначе после перемещения окна Windows перерисовывает её светлой линией по краям.
+            case WM_NCPAINT:
+                m.Result = IntPtr.Zero;
+                return;
+
+            case WM_NCACTIVATE:
+                // притворяемся активным, чтобы система не рисовала «неактивную» рамку
+                if (m.WParam == IntPtr.Zero) m.WParam = (IntPtr)1;
+                base.WndProc(ref m);
+                return;
+
+            case WM_NCUAHDRAWCAPTION:
+            case WM_NCUAHDRAWFRAME:
+                m.Result = IntPtr.Zero;
+                return;
+
+            case WM_ACTIVATE:
+                base.WndProc(ref m);
+                NoWindowBorder?.Invoke();   // при активации цвет рамки сбрасывается — вернём «без рамки»
+                return;
+
+            // Перемещение и ресайз: Windows перечитывает цвет системной рамки — возвращаем «без рамки»
+            case WM_WINDOWPOSCHANGED:
+            case WM_ENTERSIZEMOVE:
+            case WM_EXITSIZEMOVE:
+                base.WndProc(ref m);
+                NoWindowBorder?.Invoke();
                 return;
 
             case WM_NCHITTEST:
@@ -145,6 +209,17 @@ internal sealed class FrameForm : Form
             {
                 var mmi = Marshal.PtrToStructure<MINMAXINFO>(m.LParam);
                 mmi.MinTrack = new Point(MinTrack.Width, MinTrack.Height);
+                // развёрнутое окно не должно заезжать под панель задач
+                IntPtr mon = MonitorFromWindow(Handle, MONITOR_DEFAULTTONEAREST);
+                if (mon != IntPtr.Zero)
+                {
+                    var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+                    if (GetMonitorInfo(mon, ref mi))
+                    {
+                        mmi.MaxPos = new Point(mi.Work.Left - mi.Monitor.Left, mi.Work.Top - mi.Monitor.Top);
+                        mmi.MaxSize = new Point(mi.Work.Width, mi.Work.Height);
+                    }
+                }
                 Marshal.StructureToPtr(mmi, m.LParam, false);
                 return;
             }
@@ -196,15 +271,26 @@ internal sealed class Host : ApplicationContext
     private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
 
     private const int WM_NCLBUTTONDOWN = 0x00A1, HTCAPTION = 2;
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_ROUND = 2;
 
-    internal Host()
+    private readonly bool _startHidden;   // запуск с Windows: окно не показываем, живём в трее
+
+    internal Host(bool startHidden = false)
     {
+        _startHidden = startHidden;
         var work = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
         _scale = Math.Clamp(work.Height * 0.92 / 960.0, 1.0, 1.75);
-        int w = (int)(720 * _scale), h = (int)(960 * _scale);
+        int w = (int)(660 * _scale), h = (int)(860 * _scale);
 
         _form.FormBorderStyle = FormBorderStyle.None;
         _form.StartPosition = FormStartPosition.Manual;
@@ -212,7 +298,7 @@ internal sealed class Host : ApplicationContext
         _form.Text = Program.AppTitle;
         _form.ShowInTaskbar = true;
         // ниже этого размера элементы вёрстки перестают помещаться
-        _form.MinimumSize = new Size((int)(600 * _scale), (int)(700 * _scale));
+        _form.MinimumSize = new Size((int)(560 * _scale), (int)(640 * _scale));
         _form.Edge = (int)Math.Round(8 * _scale);
         _form.MinTrack = _form.MinimumSize;
         _form.LogHit = (msg) => Program.Log(msg);
@@ -220,8 +306,10 @@ internal sealed class Host : ApplicationContext
         {
             LayoutWeb();
             if (_regionCorners) RoundCorners();
+            NoWindowBorder();
             Program.Log($"размер окна: {_form.ClientSize.Width}x{_form.ClientSize.Height}");
         };
+        _form.NoWindowBorder = NoWindowBorder;
         _form.ClientSize = new Size(w, h);
         _form.Location = new Point(work.Left + (work.Width - w) / 2, work.Top + Math.Max(8, (work.Height - h) / 2));
         _form.FormClosing += OnClosing;
@@ -230,7 +318,14 @@ internal sealed class Host : ApplicationContext
 
         SetupTray();
         SetupHook();
-        _form.Show();
+        if (_startHidden)
+        {
+            // Запуск с Windows: окно не появляется — но интерфейс сразу готов,
+            // чтобы при первом вызове хоткеем окно открылось мгновенно.
+            _ = InitWebAsync();
+            Program.Log("запуск скрытый (вместе с Windows) — окно только по вызову");
+        }
+        else _form.Show();
     }
 
     /* ------------------------------ трей ------------------------------ */
@@ -278,9 +373,33 @@ internal sealed class Host : ApplicationContext
     {
         _form.Show();
         if (_form.WindowState == FormWindowState.Minimized) _form.WindowState = FormWindowState.Normal;
-        _form.BringToFront();
-        _form.Activate();
+        ForceForeground(_form);
         Program.Log("окно показано");
+    }
+
+    /// <summary>Выводит окно на передний план, даже когда фокус у чужой программы:
+    /// Windows сама фокус не отдаёт, поэтому на время вызова цепляемся к её потоку ввода.</summary>
+    private static void ForceForeground(Form f)
+    {
+        IntPtr h = f.Handle;
+        if (h == IntPtr.Zero) return;
+        IntPtr fore = GetForegroundWindow();
+        uint foreThread = GetWindowThreadProcessId(fore, out _);
+        uint thisThread = GetCurrentThreadId();
+        if (fore != h && foreThread != 0 && foreThread != thisThread)
+        {
+            AttachThreadInput(foreThread, thisThread, true);
+            BringWindowToTop(h);
+            SetForegroundWindow(h);
+            f.Activate();
+            AttachThreadInput(foreThread, thisThread, false);
+        }
+        else
+        {
+            BringWindowToTop(h);
+            SetForegroundWindow(h);
+            f.Activate();
+        }
     }
 
     private void HideWindowUi()
@@ -354,8 +473,12 @@ internal sealed class Host : ApplicationContext
         Program.Log($"интерфейс распакован: {n} файлов");
     }
 
+    private bool _webStarted;
+
     private async Task InitWebAsync()
     {
+        if (_webStarted) return;              // второй раз (например, из Shown) не нужен
+        _webStarted = true;
         try
         {
             ExtractUi();
@@ -405,10 +528,15 @@ internal sealed class Host : ApplicationContext
         _web.Bounds = new Rectangle(m, m, Math.Max(1, c.Width - 2 * m), Math.Max(1, c.Height - 2 * m));
     }
 
+    /// <summary>Убирает цвет системной рамки: у окна своей рамки нет, светлая линия не нужна.</summary>
+    private void NoWindowBorder()
+    {
+        int none = unchecked((int)0xFFFFFFFE);          // DWMWA_COLOR_NONE
+        DwmSetWindowAttribute(_form.Handle, 34 /*DWMWA_BORDER_COLOR*/, ref none, sizeof(int));
+    }
+
     private void ApplyRoundedCorners()
     {
-        int noBorder = unchecked((int)0xFFFFFFFE);      // DWMWA_COLOR_NONE
-        DwmSetWindowAttribute(_form.Handle, 34 /*DWMWA_BORDER_COLOR*/, ref noBorder, sizeof(int));
         int pref = DWMWCP_ROUND;
         _regionCorners = DwmSetWindowAttribute(_form.Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int)) != 0;
         if (_regionCorners)
@@ -457,13 +585,18 @@ internal sealed class Host : ApplicationContext
     private void SendText(string what, string text) =>
         Send(new JsonObject { ["t"] = what, ["text"] = text });
 
+    /// <summary>Строка статистики. Деньги считаем только для той модели, чьи цены знаем.</summary>
+    private string Stats(ApiResult r) =>
+        Api.Stats(r.Sec, r.InTok, r.OutTok,
+            string.Equals(_cfg.Model, Cfg.DefaultModel, StringComparison.OrdinalIgnoreCase));
+
     private async void OnWebMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         string raw = e.TryGetWebMessageAsString();
         JsonNode? node;
         try { node = JsonNode.Parse(raw); } catch { Program.Log("мост: не разобрал сообщение " + raw); return; }
         string cmd = node?["cmd"]?.GetValue<string>() ?? "";
-        Program.Log("мост: " + raw);
+        Program.Log($"мост: {cmd} ({raw.Length} байт)");   // сам текст перевода и чата в лог не пишем
 
         switch (cmd)
         {
@@ -502,10 +635,6 @@ internal sealed class Host : ApplicationContext
                     catch (Exception ex) { SetStatus("Буфер обмена недоступен: " + ex.Message, "err"); }
                 }
                 else SetStatus("Нечего копировать", "warn");
-                break;
-            case "clipRead":
-                try { SendText("input", Clipboard.ContainsText() ? Clipboard.GetText() : ""); }
-                catch (Exception ex) { SetStatus("Буфер обмена недоступен: " + ex.Message, "err"); }
                 break;
             case "translateSource":
                 TranslateText(node?["text"]?.GetValue<string>() ?? "");
@@ -590,6 +719,7 @@ internal sealed class Host : ApplicationContext
         {
             var shot = new ShotForm(frozen, bounds);
             _shot = shot;
+            shot.Shown += (_, _) => ForceForeground(shot);   // выделение области тоже должно быть в фокусе
             shot.ShowDialog();
             crop = shot.Crop;
             _shot = null;
@@ -672,7 +802,7 @@ internal sealed class Host : ApplicationContext
         if (kind == JobChat)
         {
             _chat.Add(new ChatMsg { Role = "bot", Text = res.Text, At = DateTime.Now });
-            SetStatus(Api.Stats(res.Sec, res.InTok, res.OutTok));
+            SetStatus(Stats(res));
         }
         else if (kind == JobOcr)
         {
@@ -682,7 +812,7 @@ internal sealed class Host : ApplicationContext
         else
         {
             string text = res.Text;
-            string stats = Api.Stats(res.Sec, res.InTok, res.OutTok);
+            string stats = Stats(res);
             int sep = text.IndexOf("\n---", StringComparison.Ordinal);
             if (sep >= 0)
             {
@@ -709,10 +839,30 @@ internal sealed class Host : ApplicationContext
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValue = "Podstrochnik";
 
+    /// <summary>Путь к exe из записи автозапуска (в значении реестра: "путь" --tray).</summary>
+    private static string ExeFromRunValue(string stored)
+    {
+        string s = stored.Trim();
+        int args = s.IndexOf(" --", StringComparison.Ordinal);
+        if (args > 0) s = s[..args];
+        return s.Trim().Trim('"');
+    }
+
     private static bool AutostartOn()
     {
         using var k = Registry.CurrentUser.OpenSubKey(RunKey);
-        return k?.GetValue(RunValue) != null;
+        string? stored = k?.GetValue(RunValue) as string;
+        if (stored == null) return false;
+        // exe могли перетащить в другую папку — в реестре остался старый путь, и автозапуск молча не работает;
+        // старая запись без «--tray» показывала бы окно при входе в Windows — тоже перезаписываем
+        string cur = Environment.ProcessPath ?? "";
+        if (!string.Equals(ExeFromRunValue(stored), cur, StringComparison.OrdinalIgnoreCase)
+            || !stored.Contains("--tray"))
+        {
+            Program.Log($"автозапуск: запись устарела ({stored}) — перезаписываю на «{cur} --tray»");
+            SetAutostart(true);
+        }
+        return true;
     }
 
     private static void SetAutostart(bool on)
@@ -722,8 +872,9 @@ internal sealed class Host : ApplicationContext
         if (on)
         {
             string exe = Environment.ProcessPath ?? Application.ExecutablePath;
-            k.SetValue(RunValue, "\"" + exe + "\"");
-            Program.Log("автозапуск включён: " + exe);
+            // --tray — при входе в Windows окно не показываем (см. Main)
+            k.SetValue(RunValue, "\"" + exe + "\" --tray");
+            Program.Log("автозапуск включён: " + exe + " --tray");
         }
         else
         {

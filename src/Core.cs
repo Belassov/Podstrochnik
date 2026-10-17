@@ -1,5 +1,6 @@
 // Подстрочник — рабочая логика: конфиг, запросы к модели, контекст, чат, хоткеи, захват экрана.
 // Поведение перенесено из прежней версии на C без изменений.
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -14,7 +15,8 @@ namespace Podstrochnik;
 internal sealed class Cfg
 {
     public string ApiKey = "";
-    public string Model = "deepseek/deepseek-v4.1-flash";
+    public const string DefaultModel = "deepseek/deepseek-v4.1-flash";
+    public string Model = DefaultModel;
     public string Host = "https://openrouter.ai/api/v1/chat/completions";
     public bool ReasoningOff = true;
     public int CtxLimit = 50000;
@@ -218,7 +220,8 @@ internal static class Api
             req.Headers.TryAddWithoutValidation("X-Title", "Podstrochnik");
             req.Content = new StringContent(body, Encoding.UTF8, "application/json");
             using var resp = Http.Send(req);
-            string raw = new StreamReader(resp.Content.ReadAsStream()).ReadToEnd();
+            using var rs = new StreamReader(resp.Content.ReadAsStream(), Encoding.UTF8);
+            string raw = rs.ReadToEnd();
             res.Sec = sw.Elapsed.TotalSeconds;
             if (!resp.IsSuccessStatusCode)
             {
@@ -245,9 +248,11 @@ internal static class Api
     public static string Money(int inTok, int outTok) =>
         "$" + ((inTok * 0.036 / 1e6) + (outTok * 0.684 / 1e6)).ToString("0.000000", System.Globalization.CultureInfo.InvariantCulture);
 
-    public static string Stats(double sec, int inTok, int outTok) =>
+    /// <summary>Строка статистики. Деньги показываем только для той модели, чьи цены знаем.</summary>
+    public static string Stats(double sec, int inTok, int outTok, bool withMoney) =>
         string.Format(System.Globalization.CultureInfo.InvariantCulture,
-            "{0:0.00} с · токенов {1}→{2} · {3}", sec, inTok, outTok, Money(inTok, outTok));
+            "{0:0.00} с · токенов {1}→{2}{3}", sec, inTok, outTok,
+            withMoney ? " · " + Money(inTok, outTok) : "");
 }
 
 /* ============================ захват области экрана ============================ */
@@ -346,15 +351,33 @@ internal static class ScreenCapture
         return bmp;
     }
 
-    public static string? PngBase64(Bitmap bmp)
+    /// <summary>PNG в base64. Слишком большую картинку уменьшаем: модели читают и так,
+    /// зато экономим и время, и деньги.</summary>
+    public static string? PngBase64(Bitmap bmp, int maxSide = 1568)
     {
         try
         {
             using var ms = new MemoryStream();
-            bmp.Save(ms, ImageFormat.Png);
+            using (var outBmp = Fit(bmp, maxSide)) outBmp.Save(ms, ImageFormat.Png);
             return Convert.ToBase64String(ms.ToArray());
         }
         catch (Exception ex) { Program.Log("png: ошибка — " + ex.Message); return null; }
+    }
+
+    private static Bitmap Fit(Bitmap src, int maxSide)
+    {
+        if (src.Width <= maxSide && src.Height <= maxSide) return new Bitmap(src);
+        double k = Math.Min((double)maxSide / src.Width, (double)maxSide / src.Height);
+        int w = Math.Max(1, (int)Math.Round(src.Width * k));
+        int h = Math.Max(1, (int)Math.Round(src.Height * k));
+        var dst = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(dst))
+        {
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.DrawImage(src, new Rectangle(0, 0, w, h));
+        }
+        return dst;
     }
 }
 

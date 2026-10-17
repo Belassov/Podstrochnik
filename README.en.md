@@ -68,7 +68,7 @@ look like that. The window opens and an icon appears near the clock.
 * **Session context** — every new selection is added to the context, so names and terms stay
   consistent. Limit 50,000 tokens, a fill counter and a reset button.
 * **Window** — resizable from any edge, the layout adapts.
-* **Tray, start with Windows**, RU/EN interface, dark theme.
+* **Tray, start with Windows**, dark theme.
 
 ## Requirements
 
@@ -77,8 +77,7 @@ Windows 10/11, the WebView2 Runtime component (ships with Edge) and an
 
 ## Settings and log
 
-* `%APPDATA%\Podstrochnik\config.ini` — key, model, context limit, interface fonts
-  (`ui_font`, `chat_font`), window position.
+* `%APPDATA%\Podstrochnik\config.ini` — key, model, context limit.
 * `%APPDATA%\Podstrochnik\log.txt` — startup, requests, errors.
 * Nothing except the text you translate is sent anywhere; settings and log stay on your machine.
 

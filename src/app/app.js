@@ -32,6 +32,35 @@
   const fmtTime = (v) => { const d = v ? new Date(v) : new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
   const fmtNum = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
 
+  /* ------------------------- язык перевода ------------------------- */
+  // Определяем язык вставленного текста по написанию — строка «автоопределение → русский»
+  // сразу показывает, с какого языка перевод. Точнее (испанский, немецкий и прочие
+  // латинские) эвристика не умеет — для них показывается «английский».
+  function detectLang(t) {
+    let cyr = 0, lat = 0, han = 0, kana = 0, hangul = 0, arab = 0;
+    for (const ch of t || '') {
+      const c = ch.codePointAt(0);
+      if (c >= 0x0400 && c <= 0x04FF) cyr++;
+      else if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) lat++;
+      else if (c >= 0x4E00 && c <= 0x9FFF) han++;
+      else if (c >= 0x3040 && c <= 0x30FF) kana++;
+      else if (c >= 0xAC00 && c <= 0xD7AF) hangul++;
+      else if (c >= 0x0600 && c <= 0x06FF) arab++;
+    }
+    if (cyr > lat) return cyr ? 'русский' : '';
+    if (lat > cyr) return 'английский';
+    if (han) return 'китайский';
+    if (kana) return 'японский';
+    if (hangul) return 'корейский';
+    if (arab) return 'арабский';
+    return '';
+  }
+  function updateLangLine() {
+    const lang = detectLang($('#src').value);
+    $('#mode-text').textContent = lang === 'русский' ? 'русский'
+      : (lang || 'автоопределение') + ' → русский';
+  }
+
   function el(tag, cls, text) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -58,34 +87,26 @@
     $('#btn-autostart').classList.toggle('off', !state.autostart);
     // перевод
     const hasTr = !!(state.translation && state.translation.text);
-    const trText = $('#tr-text'), trFoot = $('#tr-foot'), trTime = $('#tr-time');
+    const trText = $('#tr-text'), trStats = $('#tr-stats');
     trText.textContent = '';
     if (hasTr) {
       trText.textContent = state.translation.text;
-      trTime.hidden = false;
-      $('#tr-time-text').textContent = fmtTime(state.translation.at);
-      trFoot.classList.remove('empty');
-      trFoot.textContent = state.translation.stats || 'Перевод готов';
+      trStats.textContent = state.translation.stats || '';
     } else {
       trText.appendChild(el('span', 'empty', 'Здесь появится перевод'));
-      trTime.hidden = true;
-      trFoot.classList.add('empty');
-      trFoot.textContent = 'Ожидание перевода';
+      trStats.textContent = '';
     }
     $('#btn-copy').disabled = !hasTr;
     // пока идёт запрос — кнопки действий неактивны
     const b = !!state.busy;
-    $('#btn-clip').disabled = b;
     $('#btn-screen').disabled = b;
-    $('#btn-src-translate').disabled = b || !$('#src').value.trim();
     $('#btn-send').disabled = b || !inp.value.trim();
-    // кнопки перевода: «перевести из поля» — только когда в поле есть текст
-    $('#btn-src-translate').disabled = !$('#src').value.trim();
     // сброс контекста — только когда есть что сбрасывать
     $('#btn-reset').disabled = !(state.ctxTokens || state.chat.length || hasTr);
     // галочка в шапке карточки: зелёная только когда перевод есть, иначе приглушённая
     const tick = document.querySelector('.card.translate .card-head svg');
     if (tick) tick.style.stroke = hasTr ? '#a6e3a1' : '#6c7086';
+    updateLangLine();
     renderChat();
   }
 
@@ -113,7 +134,7 @@
           '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94e2d5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
           '<rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 4.5v3.5M8.5 13h.01M15.5 13h.01"/></svg>';
         const rep = el('div', 'reply');
-        rep.appendChild(el('div', 'reply-name', 'Подстрочник (ответ):'));
+        rep.appendChild(el('div', 'reply-name', 'Ответ:'));
         const txt = el('div', 'reply-text');
         txt.textContent = m.text;
         txt.appendChild(el('span', 'reply-time', fmtTime(m.at)));
@@ -129,7 +150,7 @@
   /* ------------------------- действия ------------------------- */
   const src = $('#src'), inp = $('#inp');
 
-  src.addEventListener('input', () => { $('#btn-src-translate').disabled = !src.value.trim(); });
+  src.addEventListener('input', updateLangLine);
   src.addEventListener('keydown', (e) => {
     // Enter — перевести набранное, Shift+Enter — перенос строки
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send({ cmd: 'translateSource', text: src.value }); }
@@ -155,10 +176,7 @@
     $('#btn-send').disabled = true;
   }
   $('#btn-send').addEventListener('click', doSend);
-  $('#btn-clip').addEventListener('click', () => send({ cmd: 'translateClip' }));
-  $('#btn-src-translate').addEventListener('click', () => send({ cmd: 'translateSource', text: src.value }));
   $('#btn-copy').addEventListener('click', () => send({ cmd: 'copy' }));
-  $('#btn-paste').addEventListener('click', () => send({ cmd: 'clipRead' }));
   $('#btn-screen').addEventListener('click', () => send({ cmd: 'screenToInput' }));
   $('#btn-reset').addEventListener('click', () => send({ cmd: 'reset' }));
   $('#btn-autostart').addEventListener('click', () => send({ cmd: 'autostart' }));
@@ -187,18 +205,13 @@
       render();
     } else if (m.t === 'status') {
       setStatus(m.text, m.kind);
-    } else if (m.t === 'clip') {
-      inp.value = (inp.value ? inp.value + '\n' : '') + (m.text || '');
-      inp.dispatchEvent(new Event('input'));
-      inp.focus();
     } else if (m.t === 'input') {
       inp.value = m.text || '';
       inp.dispatchEvent(new Event('input'));
       inp.focus();
     } else if (m.t === 'src') {
       src.value = m.text || '';
-      src.dispatchEvent(new Event('input'));
-      $('#btn-src-translate').disabled = !src.value.trim();
+      src.dispatchEvent(new Event('input'));   // обновит строку языка
     }
   });
 
@@ -209,7 +222,6 @@
     if (obj.cmd === 'drag') return;
     if (obj.cmd === 'autostart') { state.autostart = !state.autostart; render(); return; }
     if (obj.cmd === 'reset') { state.translation = null; state.chat = []; state.ctxTokens = 0; render(); setStatus('Контекст очищен (предпросмотр)'); return; }
-    if (obj.cmd === 'clipRead') { inp.value = 'Текст из буфера (предпросмотр)'; inp.dispatchEvent(new Event('input')); return; }
     if (obj.cmd === 'translateSource' || obj.cmd === 'translateClip') { setStatus('предпросмотр: перевод не выполняется', 'warn'); return; }
     if (obj.cmd === 'chat') { setStatus('предпросмотр: чат не отвечает', 'warn'); return; }
     if (obj.cmd === 'screenToInput') { setStatus('предпросмотр: захват экрана недоступен', 'warn'); return; }

@@ -34,23 +34,22 @@ body{
 
 /* ---------- Шапка ---------- */
 .titlebar{
-  flex:0 0 62px;display:flex;align-items:center;gap:11px;
-  padding:0 12px 0 14px;
+  flex:0 0 50px;display:flex;align-items:center;gap:10px;
+  padding:0 10px 0 12px;
   border-bottom:1px solid var(--surface0);
   background:linear-gradient(180deg,#202030,#1c1c2b);
 }
 .logo{
-  width:34px;height:34px;flex:0 0 34px;border-radius:10px;
+  width:30px;height:30px;flex:0 0 30px;border-radius:8px;
   background:linear-gradient(145deg,rgba(148,226,213,.20),rgba(116,199,236,.14));
   border:1px solid rgba(148,226,213,.35);
   display:flex;align-items:center;justify-content:center;
 }
 .titles{display:flex;flex-direction:column;gap:2px;min-width:0}
-.titles h1{font-size:15px;font-weight:600;letter-spacing:.1px;line-height:1.1}
-.titles span{font-size:11px;color:var(--subtext0);line-height:1.1}
+.titles h1{font-size:13.5px;font-weight:600;letter-spacing:.1px;line-height:1.1}
 .win-buttons{margin-left:auto;display:flex;align-items:center;gap:2px}
 .win-btn{
-  width:32px;height:32px;border:0;background:transparent;border-radius:8px;
+  width:28px;height:28px;border:0;background:transparent;border-radius:8px;
   color:var(--subtext0);display:flex;align-items:center;justify-content:center;
   cursor:pointer;transition:background .15s ease,color .15s ease;
 }
@@ -60,51 +59,27 @@ body{
 /* ---------- Тело ---------- */
 .body{
   flex:1 1 auto;min-height:0;
-  display:flex;flex-direction:column;gap:10px;
-  padding:12px 14px;
+  display:flex;flex-direction:column;gap:7px;
+  padding:8px 12px;
 }
 
 /* Поле ввода */
 .source{
-  flex:0 0 150px;position:relative;
+  flex:0 0 130px;min-height:96px;position:relative;
   background:var(--mantle);
   border:1px solid var(--surface1);
   border-radius:var(--r-card);
-  padding:12px 13px;
+  padding:9px 11px;
   transition:border-color .15s ease,box-shadow .15s ease;
 }
 .source:hover{border-color:var(--surface2)}
 .source textarea{
   width:100%;height:100%;resize:none;border:0;outline:0;background:transparent;
-  font-family:var(--ui);font-size:13.5px;line-height:1.45;color:var(--text);
+  font-family:var(--ui);font-size:12.5px;line-height:1.4;color:var(--text);
   user-select:text;
 }
 .source textarea::placeholder{color:var(--overlay0)}
 .source:focus-within{border-color:var(--lavender);box-shadow:0 0 0 3px rgba(180,190,254,.10)}
-
-/* Строка режима + кнопки */
-.translate-head{flex:0 0 auto;display:flex;flex-direction:column;gap:9px}
-.mode{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--subtext0)}
-.row-actions{display:flex;align-items:center;gap:8px}
-.pill{
-  display:inline-flex;align-items:center;gap:7px;
-  height:34px;padding:0 15px;border-radius:var(--r-pill);
-  font-family:var(--ui);font-size:12.5px;font-weight:500;letter-spacing:.1px;
-  border:1px solid transparent;cursor:pointer;white-space:nowrap;
-  transition:transform .12s ease,background .15s ease,border-color .15s ease,box-shadow .15s ease,color .15s ease,opacity .15s ease;
-}
-.pill:active{transform:translateY(1px)}
-.pill[disabled]{opacity:.45;cursor:default;transform:none}
-.pill-primary{
-  background:linear-gradient(135deg,var(--blue),var(--lavender));
-  color:#191926;border-color:rgba(205,214,244,.35);
-  box-shadow:0 4px 14px rgba(137,180,250,.22);
-}
-.pill-primary:hover:not([disabled]){filter:brightness(1.06);box-shadow:0 6px 18px rgba(137,180,250,.32)}
-.pill-green{background:rgba(166,227,161,.08);color:var(--green);border-color:rgba(166,227,161,.45)}
-.pill-green:hover:not([disabled]){background:rgba(166,227,161,.16);border-color:var(--green)}
-.pill-peach{background:rgba(250,179,135,.08);color:var(--peach);border-color:rgba(250,179,135,.45)}
-.pill-peach:hover:not([disabled]){background:rgba(250,179,135,.16);border-color:var(--peach)}
 
 /* ---------- Карточки ---------- */
 .card{
@@ -114,47 +89,53 @@ body{
   overflow:hidden;
   display:flex;flex-direction:column;min-height:0;
 }
-.card.translate{flex:0 0 auto;max-height:40%}
-.card.chat{flex:1 1 auto;min-height:170px}
+/* доли роста: чат растёт вдвое быстрее перевода — окно любой высоты выглядит ровно */
+.card.translate{flex:1 1 30%;min-height:110px}
+.card.chat{flex:2 1 auto;min-height:150px}
 .card-head{
   display:flex;align-items:center;gap:8px;
-  padding:10px 13px;flex:0 0 auto;
+  padding:7px 11px;flex:0 0 auto;
 }
-.card-head .when{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--overlay0)}
-.card-title{font-size:13.5px;font-weight:600;color:var(--text)}
-.card-body{padding:0 13px 12px;font-size:13.5px;line-height:1.48;color:var(--subtext1);
+/* язык перевода, статистика и кнопка «скопировать» */
+.card-head .lang{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--subtext0);
+  white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.card-head .stats{margin-left:auto;font-size:11px;color:var(--overlay0);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.copy-btn{
+  width:26px;height:26px;flex:0 0 26px;border:0;border-radius:8px;
+  background:transparent;color:var(--subtext0);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s ease,color .15s ease,opacity .15s ease;
+}
+.copy-btn:hover:not([disabled]){background:var(--surface1);color:var(--text)}
+.copy-btn[disabled]{opacity:.35;cursor:default}
+.card-body{padding:0 11px 9px;font-size:12.5px;line-height:1.42;color:var(--subtext1);
   overflow-y:auto;min-height:0;user-select:text}
-.card-foot{
-  display:flex;align-items:center;gap:7px;flex:0 0 auto;
-  padding:8px 13px;border-top:1px solid var(--surface0);
-  font-size:11.5px;color:var(--overlay1);
-}
-.card-foot svg{flex:0 0 auto}
 .empty{color:var(--overlay0)}
 
 /* ---------- Чат ---------- */
 .chat-head{
-  display:flex;gap:9px;padding:11px 13px 9px;flex:0 0 auto;
+  display:flex;align-items:center;gap:9px;padding:7px 11px 6px;flex:0 0 auto;
   border-bottom:1px solid rgba(69,71,90,.5);
 }
-.chat-head p{font-size:12px;line-height:1.35;color:var(--subtext0)}
-.chat-head svg{flex:0 0 18px}
+.chat-title{font-size:12px;font-weight:600;color:var(--text)}
+.chat-head svg{flex:0 0 16px}
 .chat-body{
   flex:1 1 auto;min-height:0;overflow-y:auto;
-  display:flex;flex-direction:column;gap:9px;padding:10px 13px 12px;
+  display:flex;flex-direction:column;gap:7px;padding:8px 11px 9px;
 }
 .chat-body > *:first-child{margin-top:auto}   /* лента прижата к низу */
 
 .msg-user{align-self:flex-end;display:flex;align-items:flex-start;gap:9px;max-width:92%}
 .bubble{
   background:#2b2c44;border:1px solid rgba(137,180,250,.22);
-  border-radius:12px;padding:9px 11px 6px;
-  font-size:12.5px;line-height:1.42;color:var(--text);user-select:text;
+  border-radius:12px;padding:7px 10px 5px;
+  font-size:12px;line-height:1.4;color:var(--text);user-select:text;
   white-space:pre-wrap;overflow-wrap:anywhere;
 }
 .bubble time{display:block;text-align:right;font-size:10px;color:var(--overlay0);margin-top:3px}
 .avatar{
-  width:30px;height:30px;flex:0 0 30px;border-radius:50%;
+  width:28px;height:28px;flex:0 0 28px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
 }
 .avatar.me{background:rgba(203,166,247,.20);border:1px solid rgba(203,166,247,.45)}
@@ -162,21 +143,21 @@ body{
 
 .msg-bot{display:flex;align-items:flex-start;gap:9px}
 .msg-bot .reply{flex:1 1 auto;min-width:0;padding-top:3px}
-.reply-name{font-size:12.5px;font-weight:600;color:var(--text);margin-bottom:4px}
-.reply-text{font-size:13px;line-height:1.45;color:var(--subtext1);user-select:text;
+.reply-name{font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px}
+.reply-text{font-size:12.5px;line-height:1.42;color:var(--subtext1);user-select:text;
   white-space:pre-wrap;overflow-wrap:anywhere}
 .reply-text .sep{display:block;height:6px}
 .reply-time{display:block;text-align:right;font-size:10px;color:var(--overlay0);margin-top:4px}
 
 /* Строка ввода чата */
 .compose{
-  flex:0 0 auto;padding:9px 12px 11px;
+  flex:0 0 auto;padding:7px 10px 9px;
   border-top:1px solid rgba(69,71,90,.5);
   background:rgba(17,17,27,.35);
 }
 .compose-field{
-  display:flex;align-items:flex-end;gap:7px;
-  height:46px;padding:6px;   /* как в макете; при многострочном вводе высоту увеличивает JS */
+  display:flex;align-items:flex-end;gap:6px;
+  height:42px;padding:5px;   /* как в макете; при многострочном вводе высоту увеличивает JS */
   background:var(--surface0);
   border:1px solid var(--surface2);
   border-radius:var(--r-card);
@@ -185,9 +166,9 @@ body{
 .compose-field:hover{border-color:var(--overlay0)}
 .compose-field:focus-within{border-color:var(--lavender);box-shadow:0 0 0 3px rgba(180,190,254,.10)}
 .compose-field textarea{
-  flex:1 1 auto;min-width:0;height:auto;min-height:32px;max-height:132px;overflow-y:auto;
+  flex:1 1 auto;min-width:0;height:auto;min-height:30px;max-height:120px;overflow-y:auto;
   resize:none;border:0;outline:0;background:transparent;
-  font-family:var(--ui);font-size:12.5px;line-height:22px;color:var(--text);
+  font-family:var(--ui);font-size:12px;line-height:20px;color:var(--text);
   padding:5px 0;user-select:text;   /* однострочный вид совпадает с макетом, дальше поле растёт */
 }
 .compose-field textarea::placeholder{color:var(--subtext0)}
@@ -200,7 +181,7 @@ body{
 .compose-icon:hover{background:var(--surface1);color:var(--text)}
 .compose-icon[disabled]{opacity:.4;cursor:default}
 .compose-send{
-  width:34px;height:34px;flex:0 0 34px;border:0;border-radius:50%;cursor:pointer;
+  width:30px;height:30px;flex:0 0 30px;border:0;border-radius:50%;cursor:pointer;
   background:linear-gradient(135deg,var(--mauve),var(--blue));
   color:#191926;display:flex;align-items:center;justify-content:center;
   box-shadow:0 3px 12px rgba(203,166,247,.25);
@@ -212,15 +193,17 @@ body{
 
 /* ---------- Футер ---------- */
 .footer{
-  flex:0 0 62px;display:flex;align-items:center;gap:14px;
-  padding:0 12px 0 14px;
+  flex:0 0 54px;display:flex;align-items:center;gap:10px;
+  padding:0 10px 0 12px;
   border-top:1px solid var(--surface0);
   background:linear-gradient(180deg,#1c1c2b,#202030);
 }
 .hotkeys{display:flex;flex-direction:column;gap:5px}
-.hk{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--overlay1);white-space:nowrap}
+/* Узкое окно: прячем подсказки хоткеев, иначе кнопки справа не влезают и срезаются */
+@media (max-width:630px){ .hotkeys{display:none} }
+.hk{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--overlay1);white-space:nowrap}
 kbd{
-  font-family:var(--mono);font-size:10px;font-weight:500;line-height:1;
+  font-family:var(--mono);font-size:9.5px;font-weight:500;line-height:1;
   color:var(--subtext1);background:var(--surface0);
   border:1px solid var(--surface1);border-radius:4px;padding:3px 5px;
 }
@@ -239,7 +222,7 @@ kbd{
 
 .ghost{
   display:inline-flex;align-items:center;gap:7px;
-  height:32px;padding:0 12px;border-radius:var(--r-pill);
+  height:30px;padding:0 12px;border-radius:var(--r-pill);
   background:var(--surface0);border:1px solid var(--surface1);
   color:var(--subtext1);font-family:var(--ui);font-size:11.5px;font-weight:500;
   cursor:pointer;white-space:nowrap;
@@ -248,7 +231,7 @@ kbd{
 .ghost:hover{background:var(--surface1);border-color:var(--surface2);color:var(--text)}
 .ghost[disabled]{opacity:.45;cursor:default}
 .icon-btn{
-  width:32px;height:32px;flex:0 0 32px;display:flex;align-items:center;justify-content:center;
+  width:30px;height:30px;flex:0 0 30px;display:flex;align-items:center;justify-content:center;
   border-radius:9px;background:rgba(166,227,161,.10);border:1px solid rgba(166,227,161,.40);
   cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease;
 }
@@ -268,7 +251,7 @@ kbd{
 /* Служебная полоса-статус (появляется только когда есть что сказать) */
 .status-line{
   flex:0 0 auto;display:none;align-items:center;gap:8px;
-  padding:7px 14px 0;font-size:11.5px;color:var(--subtext0);
+  padding:5px 12px 0;font-size:11px;color:var(--subtext0);
 }
 .status-line.show{display:flex}
 .status-line.warn{color:var(--yellow)}
